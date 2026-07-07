@@ -1,0 +1,51 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "claimOS — AI-powered Intelligent Claims Processing Platform"
+authors = [
+    { name = "zaki" }
+]
+requires-python = ">=3.13,<4.0"
+dependencies = [
+    "fastapi>=0.115.6",
+    "uvicorn>=0.34.0",
+    "sqlalchemy>=2.0.36",
+    "psycopg[binary]>=3.2.3",
+    "pydantic-settings>=2.7.0",
+    "alembic>=1.14.0",
+    "python-multipart>=0.0.20",
+    "opencv-python-headless>=4.10.0.84",
+    "numpy>=2.2.0",
+    "scikit-image>=0.25.0",
+    "shapely>=2.0.0",
+    "pytesseract>=0.3.13",
+    "networkx>=3.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest (>=8.0.0)",
+    "pytest-cov (>=6.0.0)",
+    "httpx (>=0.28.0)",
+    "ruff (>=0.11.0)",
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+package-mode = false
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
