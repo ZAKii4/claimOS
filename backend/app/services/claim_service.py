@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config.constants import ClaimStatusCode
 from app.models.claim import ClaimFile
-from app.models.lookups import ClaimStatus
+from app.models.lookups import ClaimStatus, ClaimType
 from app.repositories.claim_repository import ClaimRepository
 from app.schemas.claim import ClaimCreate, ClaimRead, ClaimSummary
 from app.schemas.common import PaginatedResponse
@@ -49,6 +49,9 @@ class ClaimService:
         existing = self._repo.get_by_external_ref(data.external_ref)
         if existing is not None:
             raise DuplicateEntityError("ClaimFile", "external_ref", data.external_ref)
+
+        if self._db.get(ClaimType, data.claim_type_id) is None:
+            raise EntityNotFoundError("ClaimType", str(data.claim_type_id))
 
         # Resolve INGESTED status id
         ingested_status = self._resolve_status(ClaimStatusCode.INGESTED)

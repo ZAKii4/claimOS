@@ -12,7 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class ClaimCreate(BaseModel):
     """Schema for creating a new claim file."""
 
-    external_ref: str = Field(..., max_length=64, description="External reference number.")
+    external_ref: str = Field(
+        ..., min_length=1, max_length=64, description="External reference number."
+    )
     claim_type_id: UUID = Field(..., description="FK to claim_type lookup.")
     date_of_loss: date = Field(..., description="Date the loss occurred.")
     policy_id: UUID | None = Field(None, description="FK to insurance_policy (optional at ingestion).")

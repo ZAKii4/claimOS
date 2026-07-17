@@ -1,3 +1,5 @@
+import time
+
 from passlib.context import CryptContext
 import re
 
@@ -12,10 +14,12 @@ class PasswordPolicyManager:
         self.require_uppercase = True
         self.require_number = True
         self.require_special = True
-        
+
         # Simple brute force tracking mock (IP or Username based)
+        # Each entry is (failed_count, last_attempt_monotonic_time).
         self.failed_attempts = {}
         self.lockout_threshold = 5
+        self.lockout_duration_seconds = 15 * 60
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         return pwd_context.verify(plain_password, hashed_password)
@@ -36,15 +40,22 @@ class PasswordPolicyManager:
         
     def record_failed_attempt(self, user_identifier: str) -> bool:
         """Returns True if the user is now locked out."""
-        current = self.failed_attempts.get(user_identifier, 0)
-        self.failed_attempts[user_identifier] = current + 1
+        current, _ = self.failed_attempts.get(user_identifier, (0, 0.0))
+        self.failed_attempts[user_identifier] = (current + 1, time.monotonic())
         return self.is_locked_out(user_identifier)
-        
+
     def reset_failed_attempts(self, user_identifier: str):
         if user_identifier in self.failed_attempts:
             del self.failed_attempts[user_identifier]
-            
+
     def is_locked_out(self, user_identifier: str) -> bool:
-        return self.failed_attempts.get(user_identifier, 0) >= self.lockout_threshold
+        count, last_attempt = self.failed_attempts.get(user_identifier, (0, 0.0))
+        if count < self.lockout_threshold:
+            return False
+        if time.monotonic() - last_attempt >= self.lockout_duration_seconds:
+            # Lockout window has elapsed — clear it so a fresh attempt can proceed.
+            self.reset_failed_attempts(user_identifier)
+            return False
+        return True
 
 password_policy = PasswordPolicyManager()
