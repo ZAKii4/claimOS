@@ -1,6 +1,8 @@
 import re
 from typing import List, Tuple
 
+from app.knowledge.models import KnowledgeChunk
+
 
 class GroundingEngine:
     """Verifies that LLM outputs contain valid citations from the retrieved context."""
@@ -21,7 +23,7 @@ class GroundingEngine:
         return True, citations
         
     @staticmethod
-    def format_context_for_llm(chunks: List['KnowledgeChunk']) -> str:
+    def format_context_for_llm(chunks: List[KnowledgeChunk]) -> str:
         """Formats the retrieved chunks into a standard context string for the LLM."""
         context = "### PROVIDED KNOWLEDGE ###\n\n"
         for i, chunk in enumerate(chunks):
