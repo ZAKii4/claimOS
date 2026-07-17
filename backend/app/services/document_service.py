@@ -95,6 +95,11 @@ class DocumentService:
         try:
             context = self._pipeline.execute(context)
         except PipelineError as e:
+            if e.step_name == "upload_and_init":
+                # Empty payload / oversized file / unsupported MIME type are
+                # client input errors, not an engine failure — surface as a
+                # 422 rather than a misleading 502.
+                raise BusinessValidationError(e.message) from e
             raise EngineProcessingError(e.step_name, e.message) from e
 
         segments = segment_pages(context.pages) or [
