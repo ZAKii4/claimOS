@@ -26,6 +26,9 @@ services:
     build:
       context: ./backend
       dockerfile: ../docker/backend/Dockerfile
+    # paddlepaddle (OCR dependency) publishes no linux/arm64 wheels, only
+    # manylinux x86_64 — same reason clamav below is pinned to amd64.
+    platform: linux/amd64
     container_name: claimos-backend
     restart: unless-stopped
     env_file:
