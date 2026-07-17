@@ -130,13 +130,31 @@ export function ManualEntryForm({
     Object.entries(TOP_LEVEL_LABELS).filter(([k]) => !SKIP_TOP_LEVEL.has(k))
   );
 
+  const numberPaths = new Set(
+    Object.entries(FIELD_KIND)
+      .filter(([, kind]) => kind === "number")
+      .map(([path]) => path)
+  );
+
   const handleSubmit = async () => {
     // Only send fields the operator actually filled in — an empty text
     // input is "not provided", not "clear this field to empty string".
+    // Booleans and numbers are coerced to their real JSON type here: the
+    // backend stores whatever value it's given as-is (no server-side
+    // coercion for manual corrections, unlike LLM-extracted fields), so a
+    // numeric field left as a string would silently persist as text.
     const fields = Object.fromEntries(
       Object.entries(values)
         .filter(([, v]) => v !== "")
-        .map(([path, v]) => [path, v === "true" ? true : v === "false" ? false : v])
+        .map(([path, v]) => {
+          if (v === "true") return [path, true];
+          if (v === "false") return [path, false];
+          if (numberPaths.has(path)) {
+            const parsed = Number(v);
+            return [path, Number.isNaN(parsed) ? v : parsed];
+          }
+          return [path, v];
+        })
     );
 
     if (Object.keys(fields).length === 0) {

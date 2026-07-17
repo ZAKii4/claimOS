@@ -31,6 +31,14 @@ UPSTREAM_AGENT_IDS = [
     "decision_agent",
 ]
 
+# ocr_supervisor and fraud_agent legitimately skip (not fail) whenever there's
+# no OCR text to analyze — e.g. a claim with zero FOUND fields. decision_agent
+# already accounts for that (defaults fraud_score to 0.0), so their absence
+# must not trip the "unhealthy graph" safety net below, only a critical
+# agent's absence (extraction_agent/legal_agent, which decision_agent
+# actually depends on) should.
+CRITICAL_AGENT_IDS = {"extraction_agent", "legal_agent", "decision_agent"}
+
 
 class SupervisorAgent(BaseAgent):
     id = "supervisor_agent"
@@ -58,7 +66,9 @@ class SupervisorAgent(BaseAgent):
         decision_confidence = float(context.decision.get("confidence", 0.0))
 
         failed_agents = [
-            agent_id for agent_id, summary in agent_summaries.items() if not summary["ran"]
+            agent_id
+            for agent_id, summary in agent_summaries.items()
+            if not summary["ran"] and agent_id in CRITICAL_AGENT_IDS
         ]
 
         overridden = False

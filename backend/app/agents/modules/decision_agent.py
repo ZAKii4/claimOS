@@ -52,9 +52,17 @@ class DecisionAgent(BaseAgent):
         self.llm = llm_manager or LLMManager()
 
     async def plan(self, context: AgentContext, memory: SharedMemory) -> bool:
-        return bool(memory.get_observations_by_agent("fraud_agent")) and bool(
-            context.validation_report
-        )
+        # Only requires legal_agent to have produced a validation_report —
+        # NOT that fraud_agent ran. fraud_agent legitimately skips whenever
+        # there's no OCR text to analyze (e.g. a claim with zero FOUND
+        # fields), which is exactly the case the deterministic
+        # REQUEST_MORE_DOCUMENTS rule below exists to handle. Gating on
+        # fraud_agent's own observation meant decision_agent (and therefore
+        # supervisor_agent) never ran at all for an empty/near-empty claim —
+        # found via static review, confirmed by tracing the skip chain.
+        # fraud_score already defaults to 0.0 via context.metadata.get(...)
+        # below when fraud_agent didn't run, so this is safe.
+        return bool(context.validation_report)
 
     async def execute(self, context: AgentContext, memory: SharedMemory) -> AgentResult:
         start_time = time.time()

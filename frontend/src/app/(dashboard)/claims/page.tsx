@@ -28,6 +28,26 @@ interface ClaimType {
   label_fr: string;
 }
 
+// Mirrors the real backend enum (app/config/constants.py::ClaimStatusCode) —
+// every value a claim can actually have, not a fictional/mocked subset.
+// Previously only 5 statuses were handled here (APPROVED, PENDING_REVIEW,
+// FRAUD_ALERT, PROCESSING, REJECTED) — none of which exist in the real
+// enum except REJECTED, so the status badge was blank for every real claim
+// (including INGESTED, the status every new claim starts with).
+const STATUS_BADGE: Record<string, { label: string; className: string }> = {
+  INGESTED: { label: "Ingested", className: "bg-secondary text-secondary-foreground" },
+  PREPROCESSING: { label: "Preprocessing", className: "bg-blue-500/10 text-blue-500" },
+  OCR_IN_PROGRESS: { label: "OCR In Progress", className: "bg-blue-500/10 text-blue-500" },
+  CLASSIFYING: { label: "Classifying", className: "bg-blue-500/10 text-blue-500" },
+  EXTRACTING: { label: "Extracting", className: "bg-blue-500/10 text-blue-500" },
+  VALIDATING: { label: "Validating", className: "bg-blue-500/10 text-blue-500" },
+  AWAITING_REVIEW: { label: "Review Required", className: "bg-amber-500/10 text-amber-500" },
+  PENDING_DOCUMENTS: { label: "Pending Documents", className: "bg-amber-500/10 text-amber-500" },
+  VALIDATED: { label: "Validated", className: "bg-green-500/10 text-green-500" },
+  REJECTED: { label: "Rejected", className: "bg-red-500/10 text-red-500" },
+  ARCHIVED: { label: "Archived", className: "bg-secondary text-secondary-foreground" },
+};
+
 export default function ClaimsWorkspacePage() {
   const [claims, setClaims] = useState<ClaimSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,12 +130,16 @@ export default function ClaimsWorkspacePage() {
                       <TableCell>{claim.claim_type_code}</TableCell>
                       <TableCell>{claim.date_of_loss}</TableCell>
                       <TableCell>
-                        {claim.status_code === "APPROVED" && <Badge className="bg-green-500/10 text-green-500 hover:bg-green-500/20" variant="secondary">Approved</Badge>}
-                        {claim.status_code === "PENDING_REVIEW" && <Badge className="bg-amber-500/10 text-amber-500 hover:bg-amber-500/20" variant="secondary">Review Required</Badge>}
-                        {claim.status_code === "FRAUD_ALERT" && <Badge className="bg-red-500/10 text-red-500 hover:bg-red-500/20" variant="secondary">Fraud Alert</Badge>}
-                        {claim.status_code === "PROCESSING" && <Badge className="bg-blue-500/10 text-blue-500 hover:bg-blue-500/20" variant="secondary">Processing (AI)</Badge>}
-                        {claim.status_code === "REJECTED" && <Badge className="bg-red-500/10 text-red-500 hover:bg-red-500/20" variant="secondary">Rejected</Badge>}
-                        {!claim.status_code && <Badge variant="outline">{claim.status_code || "Unknown"}</Badge>}
+                        {(() => {
+                          const status = STATUS_BADGE[claim.status_code];
+                          return status ? (
+                            <Badge className={status.className} variant="secondary">
+                              {status.label}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">{claim.status_code || "Unknown"}</Badge>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">

@@ -21,13 +21,25 @@ def _mock_llm_response(payload: dict) -> LLMResponse:
     )
 
 
-def test_plan_requires_fraud_observation_and_validation_report():
+def test_plan_requires_validation_report():
     agent = DecisionAgent(llm_manager=MagicMock())
     memory = SharedMemory()
 
     assert asyncio.run(agent.plan(AgentContext(claim_id="C-1"), memory)) is False
 
-    memory.add_observation("fraud_agent", {"fraud_suspected": False}, confidence=0.9)
+    ctx = AgentContext(claim_id="C-1", validation_report={"compliant": True, "issues": []})
+    assert asyncio.run(agent.plan(ctx, memory)) is True
+
+
+def test_plan_does_not_require_fraud_agent_to_have_run():
+    """
+    Regression test: fraud_agent legitimately skips when there's no OCR text
+    (e.g. an empty claim) — decision_agent must still run in that case, since
+    its own REQUEST_MORE_DOCUMENTS rule is exactly what handles it.
+    """
+    agent = DecisionAgent(llm_manager=MagicMock())
+    memory = SharedMemory()  # no fraud_agent observation added at all
+
     ctx = AgentContext(claim_id="C-1", validation_report={"compliant": True, "issues": []})
     assert asyncio.run(agent.plan(ctx, memory)) is True
 
