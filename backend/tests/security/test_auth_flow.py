@@ -29,6 +29,7 @@ def real_operator():
     """Creates a real operator row with a real password hash, and cleans up after."""
     Session = get_session_factory()
     db = Session()
+    operator = None
     try:
         role = db.query(OperatorRole).filter(OperatorRole.code == "TEST_ROLE").first()
         if not role:
@@ -49,8 +50,9 @@ def real_operator():
         db.refresh(operator)
         yield operator
     finally:
-        db.query(Operator).filter(Operator.id == operator.id).delete()
-        db.commit()
+        if operator is not None:
+            db.query(Operator).filter(Operator.id == operator.id).delete()
+            db.commit()
         db.close()
 
 

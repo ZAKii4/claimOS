@@ -44,6 +44,7 @@ def auth_headers():
     """Creates a real operator, logs in for real, yields Authorization headers, cleans up."""
     Session = get_session_factory()
     db = Session()
+    operator = None
     try:
         role = db.query(OperatorRole).filter(OperatorRole.code == "TEST_ROLE").first()
         if not role:
@@ -70,8 +71,9 @@ def auth_headers():
         token = login.json()["access_token"]
         yield {"Authorization": f"Bearer {token}"}
     finally:
-        db.query(Operator).filter(Operator.id == operator.id).delete()
-        db.commit()
+        if operator is not None:
+            db.query(Operator).filter(Operator.id == operator.id).delete()
+            db.commit()
         db.close()
 
 
