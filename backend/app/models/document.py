@@ -19,7 +19,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -48,6 +48,16 @@ class ClaimDocument(Base):
         UUID(as_uuid=True), ForeignKey("claim_document.id"), nullable=True,
     )
     storage_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    document_role: Mapped[str | None] = mapped_column(
+        String(32), nullable=True,
+        doc="Party this document belongs to (OWN_VEHICLE, ADVERSE_VEHICLE, POLICY_HOLDER, "
+        "VICTIM) — set by whoever routes the claim's documents; feeds FormMappingEngine.",
+    )
+    extracted_data: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True,
+        doc="Document-level ExtractionResult (merged across pages), as produced by the "
+        "document processing pipeline's BusinessExtractionStep.",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default="now()",
     )
@@ -82,7 +92,11 @@ class DocumentPage(Base):
     page_number: Mapped[int] = mapped_column(Integer, nullable=False)
     original_page_number: Mapped[int] = mapped_column(Integer, nullable=False)
     image_uri: Mapped[str] = mapped_column(Text, nullable=False)
-    ocr_hocr_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    ocr_hocr_uri: Mapped[str | None] = mapped_column(
+        Text, nullable=True,
+        doc="No pipeline step produces an hOCR file today (OCR output is stored as "
+        "structured JSON) — left null rather than forced.",
+    )
     orientation_corrected_deg: Mapped[int | None] = mapped_column(Integer, default=0)
     resolution_dpi: Mapped[int] = mapped_column(Integer, nullable=False)
     quality_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 4), nullable=True)

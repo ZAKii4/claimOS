@@ -49,14 +49,24 @@ class ExtractionEngine(BaseEngine):
             extractors = self.registry.get_extractors_for_document(classification_result)
             
             # 2. Execute Extractors
+            # Each extractor is isolated: one broken/misbehaving extractor must
+            # degrade (skip that field) rather than take down every other real
+            # extraction for the document (previously a single AttributeError
+            # in PolicyNumberExtractor silently zeroed out every field on every
+            # document that had any layout form field detected on it).
             raw_entities = []
             extractors_used = []
+            extractor_errors = []
             for ext in extractors:
-                ext.initialize()
-                entities = ext.extract(ocr_result, layout_result, classification_result)
+                try:
+                    ext.initialize()
+                    entities = ext.extract(ocr_result, layout_result, classification_result)
+                except Exception as e:
+                    extractor_errors.append(f"{ext.name} failed: {e}")
+                    continue
                 raw_entities.extend(entities)
                 extractors_used.append(ext.name)
-                
+
             # 3. Resolve conflicts
             resolved_entities = self.resolver.resolve(raw_entities)
             
@@ -84,7 +94,7 @@ class ExtractionEngine(BaseEngine):
                 output_data={"extraction_result": result_obj.model_dump(mode='json')},
                 confidence=overall_confidence,
                 processing_time_ms=result_obj.execution_time_ms,
-                errors=[]
+                errors=extractor_errors
             )
 
         except Exception as e:

@@ -1,7 +1,7 @@
 import time
 from typing import List
 from app.knowledge.models import SearchQuery, SearchResponse, SearchResult
-from app.knowledge.vector_store import MockVectorStore
+from app.knowledge.vector_store import BaseVectorStore
 from app.knowledge.keyword_index import BM25Index
 from app.knowledge.reranker import Reranker
 from app.knowledge.embeddings import EmbeddingsEngine
@@ -10,7 +10,8 @@ from app.knowledge.embeddings import EmbeddingsEngine
 class HybridSearchEngine:
     """Orchestrates hybrid retrieval pipeline."""
     
-    def __init__(self, vector_store: MockVectorStore, bm25_index: BM25Index, embeddings_engine: EmbeddingsEngine):
+    def __init__(self, vector_store: BaseVectorStore, bm25_index: BM25Index, embeddings_engine: EmbeddingsEngine):
+
         self.vector_store = vector_store
         self.bm25_index = bm25_index
         self.embeddings_engine = embeddings_engine

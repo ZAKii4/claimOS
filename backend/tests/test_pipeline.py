@@ -4,6 +4,7 @@ Unit tests for the Document Processing Pipeline orchestrator.
 
 import pytest
 
+from app.pipeline import get_document_pipeline
 from app.pipeline.core import DocumentContext, ErrorSeverity, PipelineError, PipelineStep
 from app.pipeline.orchestrator import PipelineOrchestrator
 
@@ -92,3 +93,51 @@ def test_pipeline_degraded_continuation():
     assert len(result.errors) == 1
     assert result.errors[0]["severity"] == ErrorSeverity.DEGRADED
     assert result.errors[0]["step"] == "mock_degraded"
+
+
+def _build_minimal_pdf_bytes() -> bytes:
+    """Build a real, valid single-page PDF (not a stub/mock payload)."""
+    import fitz
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((50, 72), "POLICY NO: TEST-000000")
+    page.insert_text((50, 120), "PLATE: AA-000-AA")
+    return doc.tobytes()
+
+
+def test_real_document_pipeline_runs_end_to_end_without_crashing():
+    """
+    Regression test for the wired factory pipeline (`get_document_pipeline()`).
+
+    Every step must implement the `PipelineStep` interface (a `.name` property
+    and `execute(DocumentContext) -> DocumentContext`). A prior interface
+    mismatch (some steps written against a plain-dict context instead of
+    `DocumentContext`) caused this exact call to crash with an
+    `AttributeError` on the second step — never caught because no test
+    exercised the real factory, only hand-written mock steps.
+
+    Uses a real, valid PDF (rendered via PyMuPDF in page_extraction) rather
+    than a placeholder payload, since page extraction now genuinely rasterizes
+    the document instead of hardcoding a page count.
+    """
+    pipeline = get_document_pipeline()
+    context = DocumentContext(
+        payload=_build_minimal_pdf_bytes(),
+        filename="test.pdf",
+        content_type="application/pdf",
+    )
+
+    result = pipeline.execute(context)
+
+    expected_steps = [
+        "upload_and_init", "fingerprint", "metadata_extraction", "virus_scan",
+        "storage", "page_extraction", "iqa_assessment", "preprocessing", "ocr",
+        "layout_analysis", "classification", "business_extraction",
+        "evidence_graph", "cross_validation", "decision_engine",
+        "human_review", "archiving",
+    ]
+    assert result.completed_steps == expected_steps
+    assert result.errors == []
+    assert len(result.pages) == 1
+    assert result.validation_decision is not None

@@ -1,45 +1,58 @@
+"""
+Step 10: Layout Analysis.
+
+Takes OCR results and the page image, runs the Layout Analysis Engine,
+and stores the semantic region hierarchy on each PageContext.
+"""
+
 from app.engines.base import EngineContext, EngineStatus
 from app.engines.layout.manager import LayoutEngine
+from app.pipeline.core import DocumentContext, ErrorSeverity, PipelineStep
 
 
-class LayoutAnalysisStep:
-    """
-    Pipeline step that takes OCR results and the original image,
-    runs the Layout Analysis Engine, and updates the PageContext/DocumentContext.
-    """
-    
-    def __init__(self):
+class LayoutAnalysisStep(PipelineStep):
+
+    @property
+    def name(self) -> str:
+        return "layout_analysis"
+
+    def __init__(self) -> None:
         self.engine = LayoutEngine()
-        
-    def execute(self, context: dict) -> dict:
-        """
-        Executes the Layout Analysis step on the provided pipeline context.
-        
-        Args:
-            context (dict): The global pipeline context. Must contain:
-                            - "image_path": Path to the image.
-                            - "ocr_result": The OCRResult dictionary.
-                            - "claim_id": The UUID of the claim.
-                            
-        Returns:
-            dict: The updated pipeline context with "layout_result".
-        """
-        # Build EngineContext from pipeline context
-        engine_context = EngineContext(
-            claim_id=context.get("claim_id", "00000000-0000-0000-0000-000000000000"),
-            input_data={
-                "image_path": context.get("image_path"),
-                "ocr_result": context.get("ocr_result")
-            }
-        )
-        
-        result = self.engine.process(engine_context)
-        
-        if result.status == EngineStatus.SUCCESS:
-            context["layout_result"] = result.output_data.get("layout_analysis_result")
-            context["layout_confidence"] = result.confidence
-        else:
-            context["layout_result"] = None
-            context["layout_errors"] = result.errors
-            
+
+    def execute(self, context: DocumentContext) -> DocumentContext:
+        if not context.pages:
+            return context
+
+        for page in context.pages:
+            page_no = page.page_number
+            ocr_result = page.engine_results.get("ocr")
+            if not ocr_result or ocr_result.status != EngineStatus.SUCCESS:
+                context.errors.append({
+                    "step": self.name,
+                    "severity": ErrorSeverity.DEGRADED,
+                    "message": f"Skipped layout analysis for page {page_no}: no OCR result.",
+                })
+                continue
+
+            image_path = (page.image_uri or "").replace("local://", "")
+
+            engine_context = EngineContext(
+                claim_id=context.claim_id or "00000000-0000-0000-0000-000000000000",
+                input_data={
+                    "image_path": image_path,
+                    "ocr_result": ocr_result.output_data,
+                },
+            )
+
+            result = self.engine.process(engine_context)
+
+            if result.status == EngineStatus.SUCCESS:
+                page.engine_results["layout"] = result
+            else:
+                context.errors.append({
+                    "step": self.name,
+                    "severity": ErrorSeverity.DEGRADED,
+                    "message": f"Layout analysis failed on page {page_no}: {result.errors}",
+                })
+
         return context

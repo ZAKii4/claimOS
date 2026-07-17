@@ -9,7 +9,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Numeric, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -39,6 +39,13 @@ class ClaimFile(TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("claim_status.id"), nullable=False,
     )
     stp_eligible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    field_overrides: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True,
+        doc="Manual corrections to ClaimOpeningForm fields, keyed by dotted field "
+        "path (e.g. 'conducteur.nom'). Applied on top of the auto-fused form by "
+        "DocumentService.get_opening_form. Each entry: {value, corrected_by, "
+        "corrected_at}.",
+    )
 
     # ── Relationships ────────────────────────────────────────────────────
     policy = relationship("InsurancePolicy", lazy="select")

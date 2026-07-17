@@ -49,10 +49,10 @@ class PolicyNumberExtractor(BaseExtractor):
             if not isinstance(field, FormFieldRegion):
                 continue
                 
-            label = field.label_text.lower()
+            label = (field.label or "").lower()
             if "police" in label or "contrat" in label:
-                if field.value_text:
-                    raw_val = field.value_text
+                if field.value:
+                    raw_val = field.value
                     
                     bbox = None
                     if field.bounding_box:

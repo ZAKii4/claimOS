@@ -8,6 +8,7 @@ import logging
 import cv2
 import numpy as np
 
+from app.config.settings import get_settings
 from app.engines.ocr.base import BaseOCRAdapter
 from app.engines.ocr.models import BoundingBox, OCRBlock, OCRLine, OCRPage, OCRWord
 
@@ -63,7 +64,8 @@ class TesseractAdapter(BaseOCRAdapter):
         h, w = image.shape[:2]
         
         # output_type=dict returns a dictionary with keys: level, page_num, block_num, par_num, line_num, word_num, left, top, width, height, conf, text
-        data = pytesseract.image_to_data(rgb_image, output_type=pytesseract.Output.DICT)
+        lang = get_settings().OCR_LANGUAGES
+        data = pytesseract.image_to_data(rgb_image, lang=lang, output_type=pytesseract.Output.DICT)
         
         blocks_dict = {}
         
@@ -141,7 +143,7 @@ class TesseractAdapter(BaseOCRAdapter):
         
         return OCRPage(
             blocks=blocks,
-            language=None,
+            language=lang,
             engine_name=self.name,
             processing_time_ms=elapsed_ms
         )

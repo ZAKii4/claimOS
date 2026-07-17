@@ -45,8 +45,7 @@ class OCRStep(PipelineStep):
                 input_data={
                     "image_path": image_path,
                     "iqa_report": iqa_report,
-                    # We can specify engine preference here. For tests, we can default to ["tesseract", "mock"]
-                    "engine_preference": ["tesseract", "mock"]
+                    "engine_preference": ["doctr", "paddleocr", "tesseract"]
                 }
             )
             

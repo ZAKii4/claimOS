@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: claimos-config
+  namespace: claimos-enterprise
+data:
+  OLLAMA_BASE_URL: "http://claimos-ollama:11434"
+  POSTGRES_HOST: "claimos-postgres"
+  NEO4J_URI: "bolt://claimos-neo4j:7687"
+  ENVIRONMENT: "production"

@@ -1,0 +1,249 @@
+version: '3.8'
+
+# =============================================================================
+# Enterprise AI Claims Processing Platform v2
+# Infrastructure: Docker Compose (Development / Staging)
+# =============================================================================
+# Production deployment uses Kubernetes (Helm charts).
+# This compose file is for local development and CI/CD integration testing.
+# =============================================================================
+
+services:
+
+  # ===========================================================================
+  # DATA LAYER
+  # ===========================================================================
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: claim_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_dev_password}
+      POSTGRES_DB: claims_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/migrations/v2:/docker-entrypoint-initdb.d:ro
+    command: >
+      postgres
+        -c shared_preload_libraries=pg_stat_statements
+        -c log_min_duration_statement=100
+        -c max_connections=200
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U claim_admin -d claims_platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - claim-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - claim-network
+
+  # Qdrant: Vector database for RAG (continuous learning fast loop)
+  qdrant:
+    image: qdrant/qdrant:v1.9.0
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    networks:
+      - claim-network
+
+  # ===========================================================================
+  # EVENT BUS
+  # ===========================================================================
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - claim-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      zookeeper:
+        condition: service_started
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    networks:
+      - claim-network
+
+  # Kafka topic initialization
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      kafka:
+        condition: service_started
+    entrypoint: /bin/bash
+    command: |
+      -c '
+      echo "Waiting for Kafka to be ready..."
+      cub kafka-ready -b kafka:29092 1 60
+
+      echo "Creating topics..."
+
+      # Core pipeline topics
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
+        --topic claim.ingestion.raw --partitions 12 --replication-factor 1
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
+        --topic claim.ingestion.normalized --partitions 12 --replication-factor 1
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
+        --topic claim.vision.extracted --partitions 12 --replication-factor 1
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
+        --topic claim.classification.completed --partitions 6 --replication-factor 1
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
+        --topic claim.extraction.entities --partitions 12 --replication-factor 1
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
+        --topic claim.validation.completed --partitions 6 --replication-factor 1
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
+        --topic claim.decision.final --partitions 6 --replication-factor 1
+
+      # Continuous learning topics
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
+        --topic claim.correction.submitted --partitions 6 --replication-factor 1
+
+      # Dead Letter Queues
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
+        --topic claim.ingestion.raw.dlq --partitions 3 --replication-factor 1
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
+        --topic claim.vision.extracted.dlq --partitions 3 --replication-factor 1
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
+        --topic claim.extraction.entities.dlq --partitions 3 --replication-factor 1
+
+      # Audit event topic
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
+        --topic platform.audit.events --partitions 6 --replication-factor 1
+
+      echo "All topics created successfully."
+      '
+    networks:
+      - claim-network
+
+  # ===========================================================================
+  # WORKFLOW ENGINE (Temporal.io)
+  # ===========================================================================
+
+  temporal:
+    image: temporalio/auto-setup:1.24
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "7233:7233"   # gRPC frontend
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=claim_admin
+      - POSTGRES_PWD=${POSTGRES_PASSWORD:-secure_dev_password}
+      - POSTGRES_SEEDS=postgres
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+    networks:
+      - claim-network
+
+  temporal-ui:
+    image: temporalio/ui:2.26.2
+    depends_on:
+      - temporal
+    ports:
+      - "8080:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    networks:
+      - claim-network
+
+  # ===========================================================================
+  # OBSERVABILITY
+  # ===========================================================================
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\\|yellow\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - claim-network
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - claim-network
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    depends_on:
+      - prometheus
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - claim-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.55
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - claim-network
+
+volumes:
+  postgres_data:
+  es_data:
+  qdrant_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  claim-network:
+    driver: bridge

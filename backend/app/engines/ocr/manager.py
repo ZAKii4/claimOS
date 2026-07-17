@@ -7,7 +7,6 @@ import logging
 import numpy as np
 
 from app.engines.ocr.adapters.doctr_adapter import DocTRAdapter
-from app.engines.ocr.adapters.mock_adapter import MockOCRAdapter
 from app.engines.ocr.adapters.paddleocr_adapter import PaddleOCRAdapter
 from app.engines.ocr.adapters.tesseract_adapter import TesseractAdapter
 from app.engines.ocr.models import OCRPage
@@ -24,8 +23,7 @@ class OCRManager:
         self.adapters = {
             "doctr": DocTRAdapter(),
             "tesseract": TesseractAdapter(),
-            "paddleocr": PaddleOCRAdapter(),
-            "mock": MockOCRAdapter()
+            "paddleocr": PaddleOCRAdapter()
         }
         
     def get_available_adapters(self) -> list[str]:
@@ -34,10 +32,10 @@ class OCRManager:
     def execute(self, image: np.ndarray, engine_preference: list[str] = None) -> OCRPage:
         """
         Executes OCR trying engines in the order of engine_preference.
-        If all preferred engines fail or are unavailable, falls back to MockOCRAdapter.
+        Raises an exception if all engines fail.
         """
         if not engine_preference:
-            engine_preference = ["doctr", "paddleocr", "tesseract", "mock"]
+            engine_preference = ["doctr", "paddleocr", "tesseract"]
             
         errors = []
             
@@ -59,6 +57,5 @@ class OCRManager:
                 logger.error(f"Engine {engine_name} failed: {e}")
                 errors.append(f"Engine {engine_name} failed: {str(e)}")
                 
-        # Ultimate fallback
-        logger.warning(f"All preferred OCR engines failed. Using MockOCRAdapter. Errors: {errors}")
-        return self.adapters["mock"].process(image)
+        logger.error(f"All preferred OCR engines failed. Errors: {errors}")
+        raise RuntimeError(f"All preferred OCR engines failed: {errors}")

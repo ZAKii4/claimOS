@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional, Any
+from app.api.v1.dependencies import get_current_operator
 from app.engines.base import EngineContext
 from app.engines.decision.manager import DecisionEngine
+from app.models.operator import Operator
 
 router = APIRouter(prefix="/claims", tags=["Decision"])
 
@@ -9,7 +11,7 @@ engine = DecisionEngine()
 
 
 @router.get("/{claim_id}/decision")
-def get_decision(claim_id: str):
+def get_decision(claim_id: str, _operator: Operator = Depends(get_current_operator)):
     """
     Retrieves the final automated Decision for a claim.
     """
@@ -17,7 +19,7 @@ def get_decision(claim_id: str):
 
 
 @router.get("/{claim_id}/decision/history")
-def get_decision_history(claim_id: str):
+def get_decision_history(claim_id: str, _operator: Operator = Depends(get_current_operator)):
     """
     Retrieves the history of decisions (e.g. initial auto-reject, followed by human approve).
     """
@@ -25,7 +27,7 @@ def get_decision_history(claim_id: str):
 
 
 @router.get("/{claim_id}/decision/explanations")
-def get_decision_explanations(claim_id: str):
+def get_decision_explanations(claim_id: str, _operator: Operator = Depends(get_current_operator)):
     """
     Retrieves the plain-text explanations for why the decision was taken.
     """
@@ -33,7 +35,7 @@ def get_decision_explanations(claim_id: str):
 
 
 @router.get("/{claim_id}/decision/audit")
-def get_decision_audit(claim_id: str):
+def get_decision_audit(claim_id: str, _operator: Operator = Depends(get_current_operator)):
     """
     Retrieves the strict audit trail for compliance.
     """
@@ -41,7 +43,7 @@ def get_decision_audit(claim_id: str):
 
 
 @router.post("/{claim_id}/decision/run")
-def run_decision(claim_id: str, payload: dict):
+def run_decision(claim_id: str, payload: dict, _operator: Operator = Depends(get_current_operator)):
     """
     Triggers the decision engine.
     For MVP, requires 'evidence_graph_result' and 'validation_report' in payload.

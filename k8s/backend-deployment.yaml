@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claimos-backend
+  namespace: claimos-enterprise
+  labels:
+    app: claimos-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: claimos-backend
+  template:
+    metadata:
+      labels:
+        app: claimos-backend
+    spec:
+      containers:
+      - name: fastapi
+        image: claimos/backend:v1.0.0
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - secretRef:
+            name: claimos-secrets
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10

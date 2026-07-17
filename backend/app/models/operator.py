@@ -29,5 +29,11 @@ class Operator(TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     accuracy_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 4), nullable=True)
 
+    # Auth: hashed with app.security.password_policy.PasswordPolicyManager (pbkdf2_sha256).
+    # NULL means no password has been set yet — login must be refused, not silently allowed.
+    hashed_password: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Base32 TOTP secret, set via /auth/mfa/enroll. NULL means MFA is not enrolled.
+    mfa_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     # Relationships
     role = relationship("OperatorRole", lazy="joined")

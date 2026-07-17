@@ -3,23 +3,53 @@ import asyncio
 from app.agents.manager import AgentManager
 from app.agents.consensus import ConsensusEngine
 from app.agents.communication import EventBus, AgentEvent, AgentMessage
-from app.agents.context import AgentContext
-from app.agents.planner import ExecutionGraph, ExecutionNode
-from app.agents.memory import SharedMemory
 
 
-def test_agent_manager_full_flow():
+def _write_test_document_image(path) -> None:
+    import cv2
+    import numpy as np
+
+    img = np.ones((300, 800, 3), dtype=np.uint8) * 255
+    cv2.putText(img, "INVOICE #4471", (30, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 0), 2)
+    cv2.putText(img, "Total: 950 EUR", (30, 200), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
+    cv2.imwrite(str(path), img)
+
+
+def test_agent_manager_no_document_fails_honestly():
+    """
+    Without a real document, OCR must fail explicitly (not fabricate canned
+    "Invoice #1234" text), and the fraud agent must skip rather than reason
+    over data that was never produced.
+    """
     manager = AgentManager()
-    
-    # Process a dummy claim
     result = asyncio.run(manager.process_claim("C-999", {"doc": "invoice"}))
-    
+
     assert result["status"] == "COMPLETED"
-    assert "ocr_supervisor" in result["agent_results"]
-    assert "fraud_agent" in result["agent_results"]
-    
-    # Check that fraud agent depended on OCR and got data
-    assert result["context"]["metadata"]["fraud_score"] is not None
+    assert result["agent_results"]["ocr_supervisor"]["status"] == "FAILED"
+    assert result["agent_results"]["fraud_agent"] is None  # skipped: no OCR text to analyze
+    assert "fraud_score" not in result["context"]["metadata"]
+
+
+@pytest.mark.requires_ollama
+def test_agent_manager_full_flow(tmp_path):
+    manager = AgentManager()
+
+    image_path = tmp_path / "document.jpg"
+    _write_test_document_image(image_path)
+
+    # Process a claim with a real document image
+    result = asyncio.run(
+        manager.process_claim("C-999", {"image_path": str(image_path)})
+    )
+
+    assert result["status"] == "COMPLETED"
+    assert result["agent_results"]["ocr_supervisor"]["status"] == "SUCCESS"
+    assert result["agent_results"]["fraud_agent"]["status"] == "SUCCESS"
+
+    # Check that fraud agent depended on real OCR text and produced a real score
+    fraud_score = result["context"]["metadata"]["fraud_score"]
+    assert fraud_score is not None
+    assert 0.0 <= fraud_score <= 1.0
 
 
 def test_consensus_engine():

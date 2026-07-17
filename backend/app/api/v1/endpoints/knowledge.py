@@ -1,47 +1,46 @@
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import Dict, Any
 
-from app.knowledge.manager import KnowledgeManager
-from app.knowledge.models import SearchQuery, SearchResponse
-from app.llm.manager import LLMManager
+from app.graph.fraud_network import fraud_analyzer
+from app.knowledge.hybrid_rag import hybrid_rag
+from app.vector.semantic_cache import semantic_cache
+from app.vector.similarity_engine import similarity_engine
 
-router = APIRouter(prefix="/knowledge", tags=["Enterprise Knowledge Platform"])
+router = APIRouter(prefix="/knowledge", tags=["Knowledge & Hybrid RAG"])
 
-# In a real app, this would be injected via dependencies
-llm_manager = LLMManager()
-knowledge_manager = KnowledgeManager(llm_manager)
+@router.post("/hybrid-search")
+async def hybrid_search(payload: dict[str, Any]):
+    tenant_id = payload.get("tenant_id", "default")
+    query = payload.get("query", "")
 
+    if not query:
+        raise HTTPException(status_code=400, detail="Query is required")
 
-class DocumentUploadRequest(BaseModel):
-    title: str
-    text: str
+    # Check cache first
+    query_emb = await similarity_engine.generate_embedding(query)
+    cached = await semantic_cache.get_cached_response(query_emb)
+    if cached:
+        return {
+            "status": "cache_hit",
+            "response": cached,
+            "context_used": {"query": query, "vector_sources": 0, "graph_sources": 0},
+        }
 
+    # Retrieve Hybrid Context and generate a real, grounded LLM answer
+    result = await hybrid_rag.generate_answer(tenant_id, query)
+    response = result["answer"]
 
-@router.post("/documents")
-async def add_document(req: DocumentUploadRequest):
-    """Add a new document to the knowledge base."""
-    doc = await knowledge_manager.add_document(req.title, req.text)
-    return {"id": doc.id, "title": doc.title, "chunks": len(doc.chunks)}
+    # Save to cache
+    await semantic_cache.set_cache(query_emb, response)
 
-
-@router.get("/documents")
-def list_documents():
-    """List all indexed documents."""
-    return [{"id": d.id, "title": d.title} for d in knowledge_manager.documents.values()]
-
-
-@router.post("/retrieve")
-async def retrieve_knowledge(query: SearchQuery):
-    """Hybrid RAG Search."""
-    return await knowledge_manager.search_engine.search(query)
-
-
-@router.get("/statistics")
-def get_statistics():
-    """Get metrics about the knowledge graph."""
     return {
-        "documents": len(knowledge_manager.documents),
-        "vector_chunks": len(knowledge_manager.vector_store.chunks),
-        "bm25_terms": len(knowledge_manager.bm25_index.doc_freqs)
+        "status": "generated",
+        "response": response,
+        "context_used": {k: v for k, v in result.items() if k != "answer"},
     }
+
+@router.get("/graph/fraud-rings")
+async def get_fraud_rings():
+    rings = await fraud_analyzer.detect_fraud_rings()
+    return {"fraud_rings": rings, "count": len(rings)}

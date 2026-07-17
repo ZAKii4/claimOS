@@ -1,7 +1,12 @@
-from fastapi import APIRouter
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, List
+from sqlalchemy.orm import Session
 
+from app.core.database import get_db
+from app.services.metrics_service import MetricsService
 from app.analytics.lake.warehouse import AnalyticsWarehouse
 from app.analytics.engines.kpi import KPIEngine
 from app.analytics.engines.advanced import AdvancedAnalyticsEngine
@@ -12,6 +17,7 @@ from app.analytics.bi.reports import ReportEngine
 from app.analytics.bi.quality import DataQualityEngine
 
 router = APIRouter(prefix="/analytics", tags=["Enterprise Analytics & BI"])
+logger = logging.getLogger("claimOS.analytics")
 
 
 class ReportReq(BaseModel):
@@ -21,18 +27,22 @@ class ReportReq(BaseModel):
 
 
 @router.get("/kpis")
-def get_kpis(tenant_id: str):
-    return {
-        "automation_rate": KPIEngine.calculate_automation_rate(tenant_id),
-        "avg_processing_time_sec": KPIEngine.calculate_average_processing_time(tenant_id),
-        "ocr_accuracy": KPIEngine.calculate_ocr_accuracy(tenant_id),
-        "fraud_rate": KPIEngine.calculate_fraud_rate(tenant_id)
-    }
+def get_kpis(tenant_id: str, db: Session = Depends(get_db)):
+    metrics_svc = MetricsService(db)
+    return metrics_svc.get_global_metrics()
 
 
 @router.get("/dashboards")
-def get_dashboards(tenant_id: str):
-    return DashboardEngine.get_executive_dashboard(tenant_id)
+def get_dashboards(tenant_id: str, db: Session = Depends(get_db)):
+    try:
+        metrics_svc = MetricsService(db)
+        return metrics_svc.get_dashboard_metrics()
+    except Exception as e:
+        # Previously masked this failure with hardcoded fake metrics — that
+        # hid real DB outages from operators and evaluators alike. Fail
+        # loudly instead.
+        logger.error("Failed to compute dashboard metrics for tenant %s: %s", tenant_id, e)
+        raise HTTPException(status_code=502, detail="Unable to compute dashboard metrics") from e
 
 
 @router.get("/warehouse")

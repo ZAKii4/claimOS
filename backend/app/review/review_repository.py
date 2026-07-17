@@ -1,8 +1,8 @@
-from sqlalchemy.orm import Session
 from datetime import datetime
-from typing import Optional, List
 
-from app.review.review_models import ReviewSession, ReviewAudit
+from sqlalchemy.orm import Session
+
+from app.review.review_models import ReviewAudit, ReviewSession
 from app.review.review_schemas import ReviewSessionCreate
 
 
@@ -10,10 +10,10 @@ class ReviewRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_session(self, claim_id: str) -> Optional[ReviewSession]:
+    def get_session(self, claim_id: str) -> ReviewSession | None:
         return self.db.query(ReviewSession).filter(ReviewSession.claim_id == claim_id).first()
-        
-    def get_inbox(self) -> List[ReviewSession]:
+
+    def get_inbox(self) -> list[ReviewSession]:
         return self.db.query(ReviewSession).filter(ReviewSession.status == "PENDING").order_by(ReviewSession.priority.desc()).all()
 
     def create_session(self, session_data: ReviewSessionCreate) -> ReviewSession:
@@ -27,15 +27,15 @@ class ReviewRepository:
         session = self.get_session(claim_id)
         if not session:
             return False
-            
+
         # Pessimistic lock logic
         if session.locked_by and session.locked_by != operator_id:
             return False # Locked by someone else
-            
+
         session.locked_by = operator_id
         session.locked_at = datetime.utcnow()
         session.status = "IN_PROGRESS"
-        
+
         self.db.commit()
         return True
 
@@ -43,11 +43,11 @@ class ReviewRepository:
         session = self.get_session(claim_id)
         if not session or session.locked_by != operator_id:
             return False
-            
+
         session.locked_by = None
         session.locked_at = None
         session.status = "PENDING"
-        
+
         self.db.commit()
         return True
 
@@ -55,7 +55,7 @@ class ReviewRepository:
         session = self.get_session(claim_id)
         if not session:
             return
-            
+
         audit = ReviewAudit(
             session_id=session.id,
             actor=actor,
@@ -66,6 +66,12 @@ class ReviewRepository:
         )
         self.db.add(audit)
         self.db.commit()
+
+    def get_audits(self, claim_id: str) -> list[ReviewAudit]:
+        session = self.get_session(claim_id)
+        if not session:
+            return []
+        return session.audits
 
     def complete_session(self, claim_id: str, final_status: str) -> None:
         session = self.get_session(claim_id)

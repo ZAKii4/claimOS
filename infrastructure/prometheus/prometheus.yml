@@ -1,0 +1,47 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # ------------------------------------------------------------------
+  # Platform Services (to be configured as services are deployed)
+  # ------------------------------------------------------------------
+  - job_name: 'ingestion-service'
+    static_configs:
+      - targets: ['ingestion-service:8000']
+    metrics_path: /metrics
+
+  - job_name: 'ocr-service'
+    static_configs:
+      - targets: ['ocr-service:8001']
+    metrics_path: /metrics
+
+  - job_name: 'extraction-service'
+    static_configs:
+      - targets: ['extraction-service:8002']
+    metrics_path: /metrics
+
+  - job_name: 'validation-service'
+    static_configs:
+      - targets: ['validation-service:8003']
+    metrics_path: /metrics
+
+  - job_name: 'llm-gateway'
+    static_configs:
+      - targets: ['llm-gateway:8004']
+    metrics_path: /metrics
+
+  # ------------------------------------------------------------------
+  # Infrastructure
+  # ------------------------------------------------------------------
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka:9092']
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  - job_name: 'temporal'
+    static_configs:
+      - targets: ['temporal:7233']

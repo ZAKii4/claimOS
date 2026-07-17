@@ -7,7 +7,14 @@ relationship resolution.
 """
 
 # Base
+# Audit
+from app.models.audit import ClaimEvent
 from app.models.base import Base, TimestampMixin, uuid_pk
+from app.models.claim import ClaimFile
+from app.models.document import ClaimDocument, DocumentPage
+
+# Knowledge
+from app.models.knowledge import KnowledgeChunk, KnowledgeDocument, TenantEmbedding
 
 # Lookup tables
 from app.models.lookups import (
@@ -21,36 +28,31 @@ from app.models.lookups import (
     EventType,
     ExtractionMethod,
     FlagReason,
-    Insurer,
     InjuryType,
+    Insurer,
     OperatorRole,
     PartyRole,
-    Prognosis,
     ProductType,
+    Prognosis,
     RoadCondition,
     WeatherCondition,
 )
 
+# Medical & legal
+from app.models.medical import MedicalCertificate, MedicalCertVersion, MedicalFinding
+
 # Core domain
 from app.models.operator import Operator
-from app.models.policy import InsurancePolicy
-from app.models.claim import ClaimFile
-from app.models.document import ClaimDocument, DocumentPage
 
 # Parties & vehicles
 from app.models.party import ClaimParty, PartyVersion
-from app.models.vehicle import ClaimVehicle, VehicleDamage, VehicleVersion
-
-# Medical & legal
-from app.models.medical import MedicalCertificate, MedicalCertVersion, MedicalFinding
 from app.models.police_report import PolicePartyStatement, PoliceReport, PoliceReportVersion
+from app.models.policy import InsurancePolicy
 
 # Provenance & validation
 from app.models.provenance import FieldProvenance
 from app.models.validation import ClaimDiscrepancy, ValidationDecision, ValidationFieldFlag
-
-# Audit
-from app.models.audit import ClaimEvent
+from app.models.vehicle import ClaimVehicle, VehicleDamage, VehicleVersion
 
 __all__ = [
     # Base
@@ -100,6 +102,10 @@ __all__ = [
     "ValidationDecision",
     "ValidationFieldFlag",
     "ClaimDiscrepancy",
+    # Knowledge
+    "KnowledgeDocument",
+    "KnowledgeChunk",
+    "TenantEmbedding",
     # Audit
     "ClaimEvent",
 ]

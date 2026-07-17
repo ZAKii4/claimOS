@@ -1,52 +1,63 @@
 import uuid
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
 
-from app.engines.base import EngineContext
-from app.engines.validation.manager import ValidationEngine
+from app.api.v1.dependencies import get_current_operator, get_validation_service
 from app.engines.evidence_graph.models import EvidenceGraphResult
+from app.models.operator import Operator
+from app.services.validation_service import ValidationService
 
 router = APIRouter(prefix="/claims", tags=["Validation"])
 
-engine = ValidationEngine()
 
 @router.get("/{claim_id}/validation")
-def get_validation_report(claim_id: str):
+def get_validation_report(
+    claim_id: uuid.UUID,
+    service: ValidationService = Depends(get_validation_service),
+    _operator: Operator = Depends(get_current_operator),
+):
     """
     Retrieves the latest Validation Report for the claim.
-    MVP Note: For this phase, we return a mock since there's no DB persistence yet.
     """
-    return {"message": "Endpoint ready. In production, this will fetch from DB.", "claim_id": claim_id}
+    return service.get_validation_report(claim_id)
 
 
 @router.get("/{claim_id}/validation/issues")
-def get_validation_issues(claim_id: str, severity: Optional[str] = None):
+def get_validation_issues(
+    claim_id: uuid.UUID,
+    severity: Optional[str] = None,
+    service: ValidationService = Depends(get_validation_service),
+    _operator: Operator = Depends(get_current_operator),
+):
     """
     Retrieves issues filtered by severity.
     """
-    return {"message": "Endpoint ready.", "claim_id": claim_id, "filter": severity}
+    return service.get_validation_issues(claim_id, severity)
 
 
 @router.get("/{claim_id}/validation/statistics")
-def get_validation_statistics(claim_id: str):
+def get_validation_statistics(
+    claim_id: uuid.UUID,
+    service: ValidationService = Depends(get_validation_service),
+    _operator: Operator = Depends(get_current_operator),
+):
     """
     Retrieves statistics.
     """
-    return {"message": "Endpoint ready.", "claim_id": claim_id}
+    return service.get_validation_statistics(claim_id)
 
 
 @router.post("/{claim_id}/validation/run")
-def run_validation(claim_id: str, graph: EvidenceGraphResult):
+def run_validation(
+    claim_id: uuid.UUID,
+    graph: EvidenceGraphResult,
+    service: ValidationService = Depends(get_validation_service),
+    _operator: Operator = Depends(get_current_operator),
+):
     """
     Triggers the validation engine on the provided Evidence Graph.
     """
-    context = EngineContext(
-        claim_id=claim_id,
-        input_data={"evidence_graph_result": graph}
-    )
-    
-    result = engine.process(context)
-    if result.status == "SUCCESS":
-        return result.output_data["validation_report"]
-    else:
-        raise HTTPException(status_code=500, detail=result.errors)
+    try:
+        return service.run_validation(claim_id, graph)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

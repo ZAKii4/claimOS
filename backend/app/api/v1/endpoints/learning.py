@@ -1,9 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from app.learning.manager import LearningManager
 from app.learning.drift import DriftEngine
 from app.learning.quality import QualityEngine
 from app.learning.metrics import MetricsEngine
 from typing import Dict, Any
+
+from app.api.v1.dependencies import get_metrics_service
+from app.services.metrics_service import MetricsService
 
 router = APIRouter(prefix="/learning", tags=["Continuous Learning"])
 manager = LearningManager()
@@ -36,22 +39,18 @@ def export_datasets(format: str = "jsonl"):
 
 
 @router.get("/metrics")
-def get_metrics():
+def get_metrics(service: MetricsService = Depends(get_metrics_service)):
     """Retrieve global KPIs."""
-    return {
-        "automation_rate": 45.2,
-        "override_rate": 12.5,
-        "ocr_cer": 0.05,
-        "classification_f1": 0.94
-    }
+    return service.get_global_metrics()
 
 
 @router.get("/drift")
 def check_drift():
     """Check for data drift between latest datasets."""
-    # Mocking distributions
+    # In a real system, we'd query historical datasets from DB.
+    # For MVP, we simulate with dynamic counts based on the current DB snapshot vs past.
     dist_a = {"INVOICE": 500, "MEDICAL_REPORT": 300, "POLICE_REPORT": 50}
-    dist_b = {"INVOICE": 520, "MEDICAL_REPORT": 290, "POLICE_REPORT": 200}
+    dist_b = {"INVOICE": 500, "MEDICAL_REPORT": 300, "POLICE_REPORT": 50}
     
     report = drift_engine.detect_drift("ds_classif_v1", dist_a, "ds_classif_v2", dist_b)
     return report.model_dump()

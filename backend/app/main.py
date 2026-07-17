@@ -28,13 +28,22 @@ logger = get_logger("claimOS.main")
 
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 
+import asyncio
+from app.api.v1.endpoints.live_logs import log_generator
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown events."""
     setup_logging()
-    logger.info("claimOS %s starting (%s)", settings.APP_VERSION, settings.ENVIRONMENT)
+    logger.info("claimOS %s starting (%s)", settings.VERSION, settings.ENVIRONMENT)
+    
+    # Start live logs background task
+    log_task = asyncio.create_task(log_generator())
+    
     yield
+    
     logger.info("claimOS shutting down.")
+    log_task.cancel()
 
 
 # ── Application ──────────────────────────────────────────────────────────────
@@ -46,7 +55,7 @@ app = FastAPI(
         "AI-powered document analysis, extraction, and decision engine "
         "for insurance claim management."
     ),
-    version=settings.APP_VERSION,
+    version=settings.VERSION,
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",

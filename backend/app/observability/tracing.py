@@ -1,7 +1,7 @@
 import uuid
 import time
 from contextvars import ContextVar
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from app.observability.models import Span, Trace
 
 # Context variables for Distributed Tracing
@@ -61,3 +61,35 @@ class TracingEngine:
     @classmethod
     def get_all_traces(cls) -> List[Trace]:
         return list(cls._traces.values())
+
+from opentelemetry import trace
+from contextlib import contextmanager
+
+class TracingManager:
+    """
+    Manages Distributed Tracing and Correlation IDs.
+    """
+    def __init__(self):
+        # We use a simple tracer abstraction wrapping opentelemetry
+        self.tracer = trace.get_tracer("claimOS.tracer")
+        
+    def generate_correlation_id(self) -> str:
+        return str(uuid.uuid4())
+        
+    @contextmanager
+    def start_span(self, name: str, attributes: Optional[Dict[str, Any]] = None):
+        """Returns a span context manager"""
+        with self.tracer.start_as_current_span(name) as span:
+            if attributes:
+                for k, v in attributes.items():
+                    span.set_attribute(k, v)
+            yield span
+        
+    def get_current_trace_id(self) -> str:
+        span = trace.get_current_span()
+        if span and span.get_span_context().is_valid:
+            return format(span.get_span_context().trace_id, "032x")
+        return self.generate_correlation_id()
+
+tracing_manager = TracingManager()
+

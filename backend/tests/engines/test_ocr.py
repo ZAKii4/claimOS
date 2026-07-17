@@ -10,8 +10,35 @@ import cv2
 import numpy as np
 
 from app.engines.base import EngineContext, EngineStatus
-from app.engines.ocr.adapters.mock_adapter import MockOCRAdapter
 from app.engines.ocr.engine import HybridOCREngine
+from app.engines.ocr.models import OCRPage, OCRBlock, OCRLine, OCRWord, BoundingBox
+
+
+class MockOCRAdapter:
+    def is_available(self) -> bool:
+        return True
+
+    def process(self, image: np.ndarray) -> OCRPage:
+        bbox = BoundingBox(x_min=0.0, y_min=0.0, x_max=1.0, y_max=1.0)
+        return OCRPage(
+            engine_name="mock_ocr",
+            blocks=[
+                OCRBlock(
+                    lines=[
+                        OCRLine(
+                            words=[
+                                OCRWord(text="SYNTHETIC", confidence=0.99, bbox=bbox, engine_name="mock_ocr"),
+                                OCRWord(text="TEXT", confidence=0.95, bbox=bbox, engine_name="mock_ocr")
+                            ],
+                            bbox=bbox
+                        )
+                    ],
+                    bbox=bbox
+                )
+            ],
+            processing_time_ms=10
+        )
+
 
 
 def test_mock_adapter():
@@ -31,8 +58,11 @@ def test_mock_adapter():
     assert word.confidence == 0.99
 
 
+
 def test_hybrid_ocr_engine():
     engine = HybridOCREngine()
+    engine.manager.adapters["mock"] = MockOCRAdapter()
+
     
     fd, path = tempfile.mkstemp(suffix=".jpg")
     os.close(fd)

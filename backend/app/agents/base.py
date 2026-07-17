@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from app.agents.context import AgentContext
-from app.agents.memory import SharedMemory
+from app.agents.shared_memory import SharedMemory
 
 class AgentResult(BaseModel):
     status: str  # SUCCESS, FAILED, SKIPPED

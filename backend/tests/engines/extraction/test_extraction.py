@@ -26,8 +26,8 @@ def test_extraction_engine():
     # 2. Create Mock Layout Result for Policy Number (Form Field)
     form_field = FormFieldRegion(
         bounding_box=BoundingBox(x_min=0.5, y_min=0.5, x_max=0.8, y_max=0.6),
-        label_text="N° Police :",
-        value_text="AXA1234567"
+        label="N° Police :",
+        value="AXA1234567"
     )
     layout_page = LayoutPage(width=1000, height=1000, form_fields=[form_field])
     layout_doc = LayoutDocument(pages=[layout_page])

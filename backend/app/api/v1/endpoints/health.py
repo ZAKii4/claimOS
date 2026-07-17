@@ -31,7 +31,7 @@ def health_check(db: Session = Depends(get_db)) -> HealthResponse:
 
     return HealthResponse(
         status="ok" if db_status == "connected" else "degraded",
-        version=settings.APP_VERSION,
+        version=settings.VERSION,
         environment=settings.ENVIRONMENT,
         database=db_status,
     )

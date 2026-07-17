@@ -1,0 +1,22 @@
+replicaCount: 3
+
+image:
+  repository: claimos/backend
+  pullPolicy: IfNotPresent
+  tag: "1.0.0"
+
+postgres:
+  enabled: true
+  persistence:
+    size: 100Gi
+
+neo4j:
+  enabled: true
+  persistence:
+    size: 50Gi
+
+ollama:
+  enabled: true
+  gpu:
+    enabled: true
+    count: 1

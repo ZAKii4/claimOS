@@ -6,7 +6,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.v1.dependencies import get_claim_service, get_pagination
+from app.api.v1.dependencies import get_claim_service, get_current_operator, get_pagination
+from app.models.operator import Operator
 from app.schemas.claim import ClaimCreate, ClaimRead, ClaimSummary
 from app.schemas.common import PaginatedResponse
 from app.services.claim_service import ClaimService
@@ -25,6 +26,7 @@ router = APIRouter(prefix="/claims", tags=["Claims"])
 def create_claim(
     data: ClaimCreate,
     service: ClaimService = Depends(get_claim_service),
+    _operator: Operator = Depends(get_current_operator),
 ) -> ClaimRead:
     return service.create_claim(data)
 
@@ -39,6 +41,7 @@ def list_claims(
     pagination: PaginationParams = Depends(get_pagination),
     status: str | None = Query(None, description="Filter by status code (e.g. INGESTED, VALIDATING)."),
     service: ClaimService = Depends(get_claim_service),
+    _operator: Operator = Depends(get_current_operator),
 ) -> PaginatedResponse[ClaimSummary]:
     return service.list_claims(pagination, status=status)
 
@@ -52,5 +55,6 @@ def list_claims(
 def get_claim(
     claim_id: UUID,
     service: ClaimService = Depends(get_claim_service),
+    _operator: Operator = Depends(get_current_operator),
 ) -> ClaimRead:
     return service.get_claim(claim_id)

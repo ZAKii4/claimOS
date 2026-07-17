@@ -11,37 +11,69 @@ class BaseVectorStore:
         pass
 
 
-class MockVectorStore(BaseVectorStore):
-    """Pure Python in-memory vector store using Cosine Similarity."""
+from sqlalchemy.orm import Session
+from app.core.database import get_session_factory
+from app.models.knowledge import KnowledgeChunk as DBKnowledgeChunk
+
+class PgVectorStore(BaseVectorStore):
+    """PostgreSQL pgvector based vector store using cosine distance."""
     
     def __init__(self):
-        self.chunks: List[KnowledgeChunk] = []
+        self.SessionLocal = get_session_factory()
         
     def add_chunks(self, chunks: List[KnowledgeChunk]):
-        self.chunks.extend(chunks)
-        
-    def _cosine_similarity(self, v1: List[float], v2: List[float]) -> float:
-        if not v1 or not v2 or len(v1) != len(v2):
-            return 0.0
+        # This function might not be used directly if KnowledgeManager persists the chunks,
+        # but if it is, we can update the vectors here.
+        db = self.SessionLocal()
+        try:
+            for chunk in chunks:
+                if chunk.vector:
+                    db_chunk = db.query(DBKnowledgeChunk).filter(DBKnowledgeChunk.id == chunk.id).first()
+                    if db_chunk:
+                        db_chunk.vector_embedding = chunk.vector
+                    else:
+                        # Assuming document_id exists
+                        db_chunk = DBKnowledgeChunk(
+                            id=chunk.id,
+                            document_id=chunk.document_id,
+                            content=chunk.content,
+                            page_number=chunk.page_number,
+                            section_title=chunk.section_title,
+                            position_index=chunk.position_index,
+                            vector_embedding=chunk.vector,
+                            metadata_json=chunk.metadata
+                        )
+                        db.add(db_chunk)
+            db.commit()
+        finally:
+            db.close()
             
-        dot_product = sum(a * b for a, b in zip(v1, v2))
-        norm_v1 = math.sqrt(sum(a * a for a in v1))
-        norm_v2 = math.sqrt(sum(b * b for b in v2))
-        
-        if norm_v1 == 0 or norm_v2 == 0:
-            return 0.0
-            
-        return dot_product / (norm_v1 * norm_v2)
-        
     def search(self, query_vector: List[float], top_k: int = 5) -> List[SearchResult]:
         if not query_vector:
             return []
             
-        results = []
-        for chunk in self.chunks:
-            if chunk.vector:
-                score = self._cosine_similarity(query_vector, chunk.vector)
-                results.append(SearchResult(chunk=chunk, score=score, vector_score=score))
+        db = self.SessionLocal()
+        try:
+            # Using cosine distance: 1 - cosine_distance = cosine similarity
+            results = db.query(
+                DBKnowledgeChunk, 
+                DBKnowledgeChunk.vector_embedding.cosine_distance(query_vector).label('distance')
+            ).order_by('distance').limit(top_k).all()
+            
+            search_results = []
+            for db_chunk, distance in results:
+                score = 1.0 - (distance or 0.0)
+                chunk = KnowledgeChunk(
+                    id=str(db_chunk.id),
+                    document_id=str(db_chunk.document_id),
+                    content=db_chunk.content,
+                    page_number=db_chunk.page_number,
+                    section_title=db_chunk.section_title,
+                    position_index=db_chunk.position_index,
+                    metadata=db_chunk.metadata_json,
+                )
+                search_results.append(SearchResult(chunk=chunk, score=score, vector_score=score))
                 
-        results.sort(key=lambda x: x.vector_score, reverse=True)
-        return results[:top_k]
+            return search_results
+        finally:
+            db.close()

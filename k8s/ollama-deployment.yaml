@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claimos-ollama
+  namespace: claimos-enterprise
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: claimos-ollama
+  template:
+    metadata:
+      labels:
+        app: claimos-ollama
+    spec:
+      nodeSelector:
+        accelerator: nvidia-gpu
+      containers:
+      - name: ollama
+        image: ollama/ollama:latest
+        ports:
+        - containerPort: 11434
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+          requests:
+            memory: "16Gi"

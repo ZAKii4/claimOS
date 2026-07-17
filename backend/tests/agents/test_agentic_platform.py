@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from app.agents.core.goals import Goal, GoalStatus
 from app.agents.core.planning import PlanningEngine
@@ -8,6 +9,8 @@ from app.agents.collaboration.delegation import DelegationEngine, TaskStatus
 from app.agents.collaboration.negotiation import NegotiationEngine, AgentProposal, NegotiationStrategy
 from app.agents.memory.memory import MemoryManager, MemoryType
 from app.agents.memory.reflection import ReflectionEngine
+
+requires_ollama = pytest.mark.requires_ollama
 
 
 # ────────────────────────────────────────────────────────
@@ -27,35 +30,49 @@ def test_goal_add_subgoal():
     assert len(g.sub_goals) == 1
 
 
+@requires_ollama
 def test_planning_engine_generate_plan_simple():
-    plan = PlanningEngine.generate_plan("t1", "Simple objective")
+    plan = asyncio.run(PlanningEngine.generate_plan("t1", "Simple objective"))
     assert plan.description == "Simple objective"
-    assert len(plan.sub_goals) == 1
+    assert len(plan.sub_goals) >= 1
 
 
+@requires_ollama
 def test_planning_engine_generate_plan_complex():
-    plan = PlanningEngine.generate_plan("t1", "Traiter un sinistre")
-    assert len(plan.sub_goals) == 4
-    assert plan.sub_goals[0].description == "Vérifier les documents"
-    assert plan.sub_goals[1].dependencies == [plan.sub_goals[0].id]
+    plan = asyncio.run(PlanningEngine.generate_plan("t1", "Traiter un sinistre d'assurance"))
+    # A real LLM decomposition isn't guaranteed to produce an exact fixed count
+    # or exact wording, but a claims-processing objective should decompose into
+    # more than one concrete sub-goal, each with real content.
+    assert len(plan.sub_goals) >= 2
+    for sub_goal in plan.sub_goals:
+        assert sub_goal.description.strip() != ""
 
 
+@requires_ollama
 def test_planning_engine_replan():
-    plan = PlanningEngine.generate_plan("t1", "Traiter un sinistre")
-    failed_id = plan.sub_goals[1].id
+    plan = asyncio.run(PlanningEngine.generate_plan("t1", "Traiter un sinistre d'assurance"))
+    original_count = len(plan.sub_goals)
+    failed_id = plan.sub_goals[0].id
     new_plan = PlanningEngine.replan(plan, failed_id)
-    
-    assert new_plan.sub_goals[1].status == GoalStatus.CANCELLED
-    assert len(new_plan.sub_goals) == 5  # added recovery
+
+    assert new_plan.sub_goals[0].status == GoalStatus.CANCELLED
+    assert len(new_plan.sub_goals) == original_count + 1  # added recovery
     assert "Recovery" in new_plan.sub_goals[-1].description
 
 
+@requires_ollama
 def test_planning_engine_replan_dependency_update():
-    plan = PlanningEngine.generate_plan("t1", "Traiter un sinistre")
+    plan = asyncio.run(PlanningEngine.generate_plan("t1", "Traiter un sinistre d'assurance"))
     failed_id = plan.sub_goals[0].id
+    dependents_before = [
+        sg for sg in plan.sub_goals if failed_id in sg.dependencies
+    ]
     new_plan = PlanningEngine.replan(plan, failed_id)
     recovery_id = new_plan.sub_goals[-1].id
-    assert recovery_id in new_plan.sub_goals[1].dependencies
+
+    for sg in dependents_before:
+        assert failed_id not in sg.dependencies
+        assert recovery_id in sg.dependencies
 
 
 def test_goal_default_confidence():
@@ -86,35 +103,51 @@ def test_execution_policy_autonomous():
 
 def test_reasoning_blocked_by_policy():
     ExecutionPolicyManager.set_level("t1", AutonomyLevel.SUPERVISED)
-    res = ReasoningEngine.reason("t1", {})
+    res = asyncio.run(ReasoningEngine.reason("t1", {}))
     assert res.is_blocked_by_policy
     assert "requires human supervision" in res.conclusion.lower()
 
 
+@requires_ollama
 def test_reasoning_deductive_fraud():
     ExecutionPolicyManager.set_level("t2", AutonomyLevel.AUTONOMOUS)
-    res = ReasoningEngine.reason("t2", {"fraud_score": 90}, ReasoningStrategy.DEDUCTIVE)
-    assert res.conclusion == "Reject Claim"
-    assert res.confidence == 0.95
+    res = asyncio.run(
+        ReasoningEngine.reason("t2", {"fraud_score": 90}, ReasoningStrategy.DEDUCTIVE)
+    )
+    assert "reject" in res.conclusion.lower()
+    assert res.confidence > 0.5
+    assert len(res.justification) > 0
 
 
+@requires_ollama
 def test_reasoning_deductive_safe():
     ExecutionPolicyManager.set_level("t2", AutonomyLevel.AUTONOMOUS)
-    res = ReasoningEngine.reason("t2", {"fraud_score": 10}, ReasoningStrategy.DEDUCTIVE)
-    assert res.conclusion == "Approve Claim"
+    res = asyncio.run(
+        ReasoningEngine.reason("t2", {"fraud_score": 10}, ReasoningStrategy.DEDUCTIVE)
+    )
+    assert "approve" in res.conclusion.lower() or "proceed" in res.conclusion.lower()
 
 
+@requires_ollama
 def test_reasoning_graph():
     ExecutionPolicyManager.set_level("t2", AutonomyLevel.AUTONOMOUS)
-    res = ReasoningEngine.reason("t2", {}, ReasoningStrategy.GRAPH)
-    assert res.conclusion == "Identify Network"
-    assert "cycle" in res.justification[0]
+    res = asyncio.run(
+        ReasoningEngine.reason(
+            "t2",
+            {"claims": ["C1", "C2", "C3"], "shared_iban": "FR7612345"},
+            ReasoningStrategy.GRAPH,
+        )
+    )
+    assert res.conclusion.strip() != ""
+    assert len(res.justification) > 0
 
 
+@requires_ollama
 def test_reasoning_rule_based():
     ExecutionPolicyManager.set_level("t2", AutonomyLevel.AUTONOMOUS)
-    res = ReasoningEngine.reason("t2", {}, ReasoningStrategy.RULE_BASED)
-    assert res.conclusion == "Proceed normally"
+    res = asyncio.run(ReasoningEngine.reason("t2", {}, ReasoningStrategy.RULE_BASED))
+    assert res.conclusion.strip() != ""
+    assert 0.0 <= res.confidence <= 1.0
 
 
 # ────────────────────────────────────────────────────────
@@ -296,15 +329,17 @@ def test_negotiation_single_proposal():
     assert res["consensus"] == "ACCEPT"
 
 
+@requires_ollama
 def test_planning_engine_generate_plan_no_claim():
-    plan = PlanningEngine.generate_plan("t1", "other task")
-    assert len(plan.sub_goals) == 1
-    assert plan.sub_goals[0].description == "Analyser la requête"
+    plan = asyncio.run(PlanningEngine.generate_plan("t1", "Analyser une requête générique"))
+    assert len(plan.sub_goals) >= 1
+    assert plan.sub_goals[0].description.strip() != ""
 
 
+@requires_ollama
 def test_reasoning_default_strategy():
     ExecutionPolicyManager.set_level("t1", AutonomyLevel.AUTONOMOUS)
-    res = ReasoningEngine.reason("t1", {})
+    res = asyncio.run(ReasoningEngine.reason("t1", {}))
     assert res.strategy == ReasoningStrategy.RULE_BASED
     
 
