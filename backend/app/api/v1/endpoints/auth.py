@@ -70,7 +70,8 @@ async def login(
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
-        "risk_score": risk
+        "risk_score": risk,
+        "user_id": operator_id,
     }
 
 @router.post("/mfa/enroll")

@@ -10,6 +10,7 @@ interface LoginSuccessResponse {
   refresh_token: string;
   token_type: string;
   risk_score: number;
+  user_id: string;
 }
 
 interface LoginMfaRequiredResponse {
@@ -46,6 +47,7 @@ export default function LoginPage() {
       setAuth({
         accessToken: success.access_token,
         refreshToken: success.refresh_token,
+        userId: success.user_id,
       });
       router.push("/");
     } catch (err) {

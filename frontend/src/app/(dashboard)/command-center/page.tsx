@@ -17,9 +17,10 @@ import {
   Bot
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, API_ROOT } from "@/lib/api-client";
 import { toast } from "sonner";
 import { RoadmapBanner } from "@/components/RoadmapBanner";
+import { useAuthStore } from "@/store/auth-store";
 
 interface PendingClaim {
   id: string;
@@ -34,6 +35,7 @@ export default function CommandCenterPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [pendingClaims, setPendingClaims] = useState<PendingClaim[]>([]);
   const [loadingClaims, setLoadingClaims] = useState(true);
+  const operatorId = useAuthStore((s) => s.userId);
 
   const fetchPendingClaims = async () => {
     try {
@@ -52,8 +54,16 @@ export default function CommandCenterPage() {
   }, []);
 
   const handleApprove = async (id: string) => {
+    if (!operatorId) {
+      toast.error("Missing operator identity — please sign in again.");
+      return;
+    }
     try {
-      await apiClient.post(`/review/${id}/approve`, {});
+      const params = new URLSearchParams({
+        operator_id: operatorId,
+        reason: "Approved from Command Center review queue",
+      });
+      await apiClient.post(`${API_ROOT}/review/${id}/approve?${params}`, {});
       toast.success("Claim approved successfully");
       fetchPendingClaims();
     } catch (err) {
@@ -62,8 +72,16 @@ export default function CommandCenterPage() {
   };
 
   const handleEscalate = async (id: string) => {
+    if (!operatorId) {
+      toast.error("Missing operator identity — please sign in again.");
+      return;
+    }
     try {
-      await apiClient.post(`/review/${id}/correct`, { correction_notes: "Escalated for human correction" });
+      const params = new URLSearchParams({ operator_id: operatorId });
+      await apiClient.post(`${API_ROOT}/review/${id}/correct?${params}`, {
+        action: "ESCALATE",
+        reason: "Escalated for human correction",
+      });
       toast.success("Claim escalated for correction");
       fetchPendingClaims();
     } catch (err) {

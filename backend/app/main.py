@@ -30,13 +30,20 @@ logger = get_logger("claimOS.main")
 
 import asyncio
 from app.api.v1.endpoints.live_logs import log_generator
+from app.review.database import Base as ReviewBase, engine as review_engine
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown events."""
     setup_logging()
     logger.info("claimOS %s starting (%s)", settings.VERSION, settings.ENVIRONMENT)
-    
+
+    # The review/HITL router (app/review/) owns its own SQLite database,
+    # separate from the main Postgres schema, and nothing but test fixtures
+    # was ever creating its tables — every review action 500'd against a
+    # real running server with "no such table: review_sessions".
+    ReviewBase.metadata.create_all(bind=review_engine)
+
     # Start live logs background task
     log_task = asyncio.create_task(log_generator())
     

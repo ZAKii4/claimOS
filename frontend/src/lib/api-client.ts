@@ -2,6 +2,11 @@ import { useAuthStore } from "@/store/auth-store";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
+// The review/HITL router (app/review/review_router.py) is mounted directly on
+// the FastAPI app, not under API_V1_PREFIX like every other router — so
+// calls to it must bypass the "/api/v1" base and hit the API host directly.
+export const API_ROOT = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
+
 export class ApiError extends Error {
   status: number;
   data: { detail?: string; [key: string]: unknown } | null;
